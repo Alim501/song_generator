@@ -15,6 +15,7 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
   const partRef = useRef<Tone.Part | null>(null);
   const rafRef = useRef<number>(0);
   const durationRef = useRef(0);
+  const eventsRef = useRef<{ time: number; pitch: string; dur: string }[]>([]);
 
   const duration = useMemo(() => {
     const notes = song.audioData.structure.flatMap((section) => section.melody);
@@ -105,6 +106,7 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
       pitch: n.pitch,
       dur: n.duration,
     }));
+    eventsRef.current = events;
 
     const part = new Tone.Part((time, value) => {
       synth.triggerAttackRelease(value.pitch, value.dur, time);
@@ -123,9 +125,26 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
     const val = parseFloat(e.target.value);
     setProgress(val);
 
-    if (playing) {
+    if (playing && synthRef.current) {
       const seekTime = val * durationRef.current;
+
+      partRef.current?.stop();
+      partRef.current?.dispose();
+
+      Tone.getTransport().stop();
+      Tone.getTransport().position = 0;
+
+      const synth = synthRef.current;
+      synth.releaseAll();
+
+      const part = new Tone.Part((time, value) => {
+        synth.triggerAttackRelease(value.pitch, value.dur, time);
+      }, eventsRef.current);
+      partRef.current = part;
+
+      part.start(0);
       Tone.getTransport().seconds = seekTime;
+      Tone.getTransport().start();
     }
   }
 
