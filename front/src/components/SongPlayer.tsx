@@ -40,11 +40,7 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
   const stop = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
     if (sourceRef.current) {
-      try {
-        sourceRef.current.stop();
-      } catch {
-        // already stopped
-      }
+      sourceRef.current.stop();
       sourceRef.current.disconnect();
       sourceRef.current = null;
     }
@@ -56,12 +52,8 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
     return () => {
       cancelAnimationFrame(rafRef.current);
       if (sourceRef.current) {
-        try {
-          sourceRef.current.stop();
-        } catch {
-          // already stopped
-        }
         sourceRef.current.disconnect();
+        sourceRef.current = null;
       }
     };
   }, []);
@@ -161,11 +153,7 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
     if (playing && ctxRef.current) {
       // Stop current, restart from new position
       if (sourceRef.current) {
-        try {
-          sourceRef.current.stop();
-        } catch {
-          // already stopped
-        }
+        sourceRef.current.stop();
         sourceRef.current.disconnect();
       }
 
