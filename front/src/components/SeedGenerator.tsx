@@ -57,30 +57,30 @@ function SeedGenerator({ t, onSeedChange, onLikesChange }: SeedGeneratorProps) {
         </h2>
         <p className="text-sm text-text-muted mb-6">{t.seedDescription}</p>
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <input
             type="text"
             value={seed}
             onChange={(e) => setSeed(e.target.value)}
             placeholder={t.seedPlaceholder}
-            className="flex-1 rounded-lg bg-bg-primary border border-white/10 px-4 py-2.5 text-sm font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent/50"
+            className="flex-1 min-w-0 rounded-lg bg-bg-primary border border-white/10 px-4 py-2.5 text-sm font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
-          {seed && (
-            <>
+          <div className="flex gap-3 flex-shrink-0">
+            {seed && (
               <button
                 onClick={() => onSeedChange?.(seed)}
                 className="rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors cursor-pointer"
               >
                 {t.go}
               </button>
-            </>
-          )}
-          <button
-            onClick={handleGenerate}
-            className="rounded-lg bg-accent/70 px-5 py-2.5 text-sm font-medium text-white hover:bg-accent transition-colors cursor-pointer"
-          >
-            {t.random}
-          </button>
+            )}
+            <button
+              onClick={handleGenerate}
+              className="rounded-lg bg-accent/70 px-5 py-2.5 text-sm font-medium text-white hover:bg-accent transition-colors cursor-pointer"
+            >
+              {t.random}
+            </button>
+          </div>
         </div>
       </div>
     </section>

@@ -66,13 +66,13 @@ function TableSongRow({ song, t }: TableSongRowProps) {
       {expanded && (
         <div className="px-4 pb-4">
           <div className="border-t border-white/5 pt-4">
-            <div className="flex gap-5">
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-5">
               <SongCover
                 seed={song.sequenceIndex}
                 title={song.songTitle}
                 artist={song.artist}
                 coverUrl={song.cover}
-                className="flex-shrink-0 w-32 h-32 rounded-xl object-cover"
+                className="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-xl object-cover"
               />
               <div className="flex-1 min-w-0 flex flex-col gap-3">
                 <SongPlayer song={song} t={t} />
