@@ -10,14 +10,11 @@ interface SongPlayerProps {
 
 function SongPlayer({ song, t: i18n }: SongPlayerProps) {
   const [playing, setPlaying] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const ctxRef = useRef<AudioContext | null>(null);
-  const startTimeRef = useRef(0);
+  const synthRef = useRef<Tone.PolySynth | null>(null);
+  const partRef = useRef<Tone.Part | null>(null);
   const rafRef = useRef<number>(0);
   const durationRef = useRef(0);
-  const bufferRef = useRef<AudioBuffer | null>(null);
 
   const duration = useMemo(() => {
     const notes = song.audioData.structure.flatMap((section) => section.melody);
@@ -32,18 +29,15 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
     durationRef.current = duration;
   }, [duration]);
 
-  // Reset buffer when song changes
-  useEffect(() => {
-    bufferRef.current = null;
-  }, [song]);
-
   const stop = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
-    if (sourceRef.current) {
-      sourceRef.current.stop();
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
-    }
+    partRef.current?.stop();
+    partRef.current?.dispose();
+    partRef.current = null;
+    synthRef.current?.dispose();
+    synthRef.current = null;
+    Tone.getTransport().stop();
+    Tone.getTransport().position = 0;
     setPlaying(false);
     setProgress(0);
   }, []);
@@ -51,60 +45,15 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
   useEffect(() => {
     return () => {
       cancelAnimationFrame(rafRef.current);
-      if (sourceRef.current) {
-        sourceRef.current.disconnect();
-        sourceRef.current = null;
-      }
+      partRef.current?.stop();
+      partRef.current?.dispose();
+      synthRef.current?.dispose();
+      Tone.getTransport().stop();
     };
   }, []);
 
-  async function renderToBuffer(): Promise<AudioBuffer> {
-    if (bufferRef.current) return bufferRef.current;
-
-    const notes = song.audioData.structure.flatMap((section) =>
-      section.melody.map((note) => ({
-        time: note.time,
-        pitch: note.pitch,
-        duration: note.duration,
-      }))
-    );
-
-    if (notes.length === 0) {
-      return new AudioBuffer({ length: 1, sampleRate: 44100, numberOfChannels: 1 });
-    }
-
-    const lastNote = notes[notes.length - 1];
-    const dur = lastNote.time + 2;
-
-    const toneBuffer = await Tone.Offline(({ transport }) => {
-      transport.bpm.value = song.audioData.tempo;
-      const synth = new Tone.PolySynth(Tone.MonoSynth, {
-        oscillator: { type: "triangle" },
-        filter: { frequency: 800, type: "lowpass", rolloff: -24 },
-        envelope: { attack: 0.1, decay: 0.3, sustain: 0.5, release: 1.5 },
-        filterEnvelope: {
-          attack: 0.05,
-          decay: 0.5,
-          sustain: 0.2,
-          baseFrequency: 300,
-          octaves: 2,
-        },
-      }).toDestination();
-      synth.volume.value = -8;
-      notes.forEach((n) => {
-        synth.triggerAttackRelease(n.pitch, n.duration, n.time);
-      });
-      transport.start();
-    }, dur);
-
-    const audioBuffer = toneBuffer.get() as AudioBuffer;
-    bufferRef.current = audioBuffer;
-    return audioBuffer;
-  }
-
   function updateProgress() {
-    if (!ctxRef.current) return;
-    const elapsed = ctxRef.current.currentTime - startTimeRef.current;
+    const elapsed = Tone.getTransport().seconds;
     const pct = Math.min(elapsed / durationRef.current, 1);
     setProgress(pct);
     if (pct < 1) {
@@ -120,56 +69,63 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
       return;
     }
 
-    setLoading(true);
-    try {
-      const audioBuffer = await renderToBuffer();
+    await Tone.start();
+    Tone.getTransport().bpm.value = song.audioData.tempo;
 
-      const ctx = new AudioContext();
-      if (ctx.state === "suspended") {
-        await ctx.resume();
-      }
-      ctxRef.current = ctx;
+    const synth = new Tone.PolySynth(Tone.MonoSynth, {
+      oscillator: { type: "triangle" },
+      filter: { frequency: 800, type: "lowpass", rolloff: -24 },
+      envelope: { attack: 0.1, decay: 0.3, sustain: 0.5, release: 1.5 },
+      filterEnvelope: {
+        attack: 0.05,
+        decay: 0.5,
+        sustain: 0.2,
+        baseFrequency: 300,
+        octaves: 2,
+      },
+    }).toDestination();
+    synth.volume.value = -8;
+    synthRef.current = synth;
 
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(ctx.destination);
-      source.onended = () => stop();
+    const notes = song.audioData.structure.flatMap((section) =>
+      section.melody.map((note) => ({
+        time: note.time,
+        pitch: note.pitch,
+        duration: note.duration,
+      }))
+    );
 
-      startTimeRef.current = ctx.currentTime;
-      source.start();
-      sourceRef.current = source;
-
-      setPlaying(true);
-      rafRef.current = requestAnimationFrame(updateProgress);
-    } finally {
-      setLoading(false);
+    if (notes.length === 0) {
+      synth.dispose();
+      return;
     }
+
+    const events = notes.map((n) => ({
+      time: n.time,
+      pitch: n.pitch,
+      dur: n.duration,
+    }));
+
+    const part = new Tone.Part((time, value) => {
+      synth.triggerAttackRelease(value.pitch, value.dur, time);
+    }, events);
+    partRef.current = part;
+
+    Tone.getTransport().stop();
+    Tone.getTransport().position = 0;
+    part.start(0);
+    Tone.getTransport().start();
+    setPlaying(true);
+    rafRef.current = requestAnimationFrame(updateProgress);
   }
 
   function handleSeek(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseFloat(e.target.value);
     setProgress(val);
 
-    if (playing && ctxRef.current) {
-      // Stop current, restart from new position
-      if (sourceRef.current) {
-        sourceRef.current.stop();
-        sourceRef.current.disconnect();
-      }
-
+    if (playing) {
       const seekTime = val * durationRef.current;
-      const buf = bufferRef.current;
-      if (!buf) return;
-
-      const ctx = ctxRef.current;
-      const source = ctx.createBufferSource();
-      source.buffer = buf;
-      source.connect(ctx.destination);
-      source.onended = () => stop();
-
-      startTimeRef.current = ctx.currentTime - seekTime;
-      source.start(0, seekTime);
-      sourceRef.current = source;
+      Tone.getTransport().seconds = seekTime;
     }
   }
 
@@ -180,10 +136,9 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
   }
 
   return (
-    <div className="flex items-center gap-2 w-full min-w-0">
+    <div className="flex items-center gap-2 w-full">
       <button
         onClick={handlePlay}
-        disabled={loading}
         className={`flex-shrink-0 size-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
           playing
             ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
@@ -191,9 +146,7 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
         }`}
         title={playing ? i18n.stop : i18n.play}
       >
-        {loading ? (
-          <div className="size-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-        ) : playing ? (
+        {playing ? (
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
@@ -226,7 +179,7 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
         step="0.001"
         value={progress}
         onChange={handleSeek}
-        className="flex-1 min-w-0 h-1 appearance-none bg-white/10 rounded-full cursor-pointer
+        className="flex-1 h-1 appearance-none bg-white/10 rounded-full cursor-pointer
           [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3
           [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent
           [&::-webkit-slider-thumb]:cursor-pointer
