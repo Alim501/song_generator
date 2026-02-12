@@ -1,7 +1,7 @@
 import { useState } from "react";
 import * as Tone from "tone";
 import JSZip from "jszip";
-import { Mp3Encoder } from "lamejs";
+import { Mp3Encoder } from "@breezystack/lamejs";
 import Navbar from "./components/Navbar";
 import SeedGenerator from "./components/SeedGenerator";
 import TableView from "./components/TableView";
@@ -129,7 +129,7 @@ function App() {
   const songs = view === "table" ? tableSongs : gallerySongs;
   const loading = view === "table" ? tableLoading : galleryLoading;
 
-  function renderSongToBuffer(song: Song): Promise<AudioBuffer> {
+  async function renderSongToBuffer(song: Song): Promise<AudioBuffer> {
     const notes = song.audioData.structure.flatMap((section) =>
       section.melody.map((note) => ({
         time: note.time,
@@ -137,10 +137,13 @@ function App() {
         duration: note.duration,
       }))
     );
+    if (notes.length === 0) {
+      return new AudioBuffer({ length: 1, sampleRate: 44100, numberOfChannels: 1 });
+    }
     const lastNote = notes[notes.length - 1];
-    const dur = lastNote ? lastNote.time + 1 : 1;
+    const dur = lastNote.time + 2;
 
-    return Tone.Offline(({ transport }) => {
+    const buffer = await Tone.Offline(({ transport }) => {
       transport.bpm.value = song.audioData.tempo;
       const synth = new Tone.PolySynth(Tone.MonoSynth, {
         oscillator: { type: "triangle" },
@@ -156,7 +159,8 @@ function App() {
         synth.triggerAttackRelease(n.pitch, n.duration, n.time);
       });
       transport.start();
-    }, dur + 1).then((buf) => buf.get() as AudioBuffer);
+    }, dur);
+    return buffer.get() as AudioBuffer;
   }
 
   function encodeToMp3(audioBuffer: AudioBuffer): Uint8Array {
@@ -166,7 +170,7 @@ function App() {
     const left = audioBuffer.getChannelData(0);
     const right = numChannels > 1 ? audioBuffer.getChannelData(1) : left;
     const sampleBlockSize = 1152;
-    const mp3Data: Int8Array[] = [];
+    const mp3Data: Uint8Array[] = [];
 
     const toInt16 = (floatArr: Float32Array): Int16Array => {
       const int16 = new Int16Array(floatArr.length);
@@ -220,8 +224,13 @@ function App() {
       const a = document.createElement("a");
       a.href = url;
       a.download = "songs.zip";
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Export failed:", e);
+      setError(e instanceof Error ? e.message : i18n.error);
     } finally {
       setExporting(false);
     }
