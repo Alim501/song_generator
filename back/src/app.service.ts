@@ -33,10 +33,16 @@ export class AppService {
       const songSeed = combinedSeed + i;
       const genre = fakerInstance.music.genre();
       let songTitle = fakerInstance.lorem.words({ min: 2, max: 4 });
-      songTitle = songTitle.charAt(0).toUpperCase() + songTitle.slice(1);
+      songTitle =
+        dto.localization === 'ru'
+          ? songTitle.charAt(0).toUpperCase() + songTitle.slice(1)
+          : faker.music.songName();
       const artist = fakerInstance.person.fullName();
       let albumTitle = fakerInstance.lorem.words({ min: 1, max: 2 });
-      albumTitle = albumTitle.charAt(0).toUpperCase() + albumTitle.slice(1);
+      albumTitle =
+        dto.localization === 'ru'
+          ? albumTitle.charAt(0).toUpperCase() + albumTitle.slice(1)
+          : faker.music.album();
       albumTitle =
         Math.random() > 0.1
           ? albumTitle
