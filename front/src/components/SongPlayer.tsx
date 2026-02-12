@@ -70,6 +70,10 @@ function SongPlayer({ song, t: i18n }: SongPlayerProps) {
     }
 
     await Tone.start();
+    const ctx = Tone.getContext().rawContext;
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
     Tone.getTransport().bpm.value = song.audioData.tempo;
 
     const synth = new Tone.PolySynth(Tone.MonoSynth, {
